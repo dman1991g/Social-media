@@ -1,4 +1,4 @@
-import { auth, database, storage, messaging } from './firebaseConfig.js'; // messaging should be exported there
+import { auth, database, storage } from './firebaseConfig.js';
 import {
   onAuthStateChanged,
   signOut
@@ -17,10 +17,6 @@ import {
   uploadBytes,
   getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js';
-import {
-  getToken,
-  onMessage
-} from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging.js';
 
 const postContent = document.getElementById('postContent');
 const postImage = document.getElementById('postImage');
@@ -30,35 +26,53 @@ const signOutBtn = document.getElementById('signOut');
 const openChatBtn = document.getElementById('openChatBtn');
 
 // Redirect if not logged in
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, user => {
   if (!user) {
     window.location.href = 'signin.html';
-  } else {
-    // ✅ Request permission for notifications
-    try {
-      const currentToken = await getToken(messaging, {
-        vapidKey: 'BGYu3HK3lQOkMrBEaQ7F_bRHqPDNB8OrdnfrDeGfWZl1vNwG4EcP5EwQseq0m_sG32poAgOjuLfoniKZ3Ua9hZ4' // Replace with your actual VAPID key from Firebase Console
-      });
-      if (currentToken) {
-        console.log('FCM token received:', currentToken);
-        // You can store the token in the database under the user if needed
-      } else {
-        console.warn('No FCM token available. Request permission to generate one.');
-      }
-    } catch (err) {
-      console.error('An error occurred while retrieving token:', err);
-    }
-
-    // ✅ Listen for messages while app is open
-    onMessage(messaging, (payload) => {
-      console.log('Message received:', payload);
-      // Optionally show an in-app notification
-      alert(payload.notification?.title || 'New Notification');
-    });
   }
 });
 
-// ... your linkify and post submission functions stay the same ...
+// Turn links into clickable hyperlinks
+function linkify(text) {
+  const urlPattern = /(\b(https?:\/\/|www\.)[^\s<>]+(?:\.[^\s<>]+)*(?:\/[^\s<>]*)?)/gi;
+  return text.replace(urlPattern, (match) => {
+    const url = match.startsWith('http') ? match : `https://${match}`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+  });
+}
+
+// Post submission
+submitPost.addEventListener('click', async () => {
+  const content = postContent.value.trim();
+  const imageFile = postImage.files[0];
+
+  if (!content && !imageFile) return;
+
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const postRef = push(dbRef(database, 'posts'));
+  const postKey = postRef.key;
+
+  const newPost = {
+    uid: user.uid,
+    username: user.displayName || 'Anonymous',
+    content: content,
+    timestamp: Date.now()
+  };
+
+  await set(postRef, newPost);
+
+  if (imageFile) {
+    const imgRef = storageRef(storage, `postImages/${postKey}`);
+    await uploadBytes(imgRef, imageFile);
+    const imageURL = await getDownloadURL(imgRef);
+    await update(postRef, { imageURL });
+  }
+
+  postContent.value = '';
+  postImage.value = '';
+});
 
 // Display posts with Like buttons
 const postFeedRef = dbRef(database, 'posts');
@@ -103,6 +117,7 @@ onChildAdded(postFeedRef, async (snapshot) => {
       await set(likeRef, true); // Like
     }
 
+    // Refresh the like UI
     const updatedPostSnap = await get(dbRef(database, `posts/${postId}`));
     const updatedPost = updatedPostSnap.val();
     const newLikeCount = updatedPost.likes ? Object.keys(updatedPost.likes).length : 0;
