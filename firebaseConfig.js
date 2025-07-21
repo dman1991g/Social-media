@@ -21,5 +21,5 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const database = getDatabase(app);
 const storage = getStorage(app);  // Initialize Firebase Storage
-
-export { app, auth, database, storage };
+const messaging = getMessageing(app);
+export { app, auth, database, storage, messaging };
