@@ -32,7 +32,7 @@ onAuthStateChanged(auth, user => {
   }
 });
 
-// Turn links into clickable hyperlinks
+// Convert links to clickable links
 function linkify(text) {
   const urlPattern = /(\b(https?:\/\/|www\.)[^\s<>]+(?:\.[^\s<>]+)*(?:\/[^\s<>]*)?)/gi;
   return text.replace(urlPattern, (match) => {
@@ -74,7 +74,7 @@ submitPost.addEventListener('click', async () => {
   postImage.value = '';
 });
 
-// Display posts with Like buttons
+// Display posts with like + comment functionality
 const postFeedRef = dbRef(database, 'posts');
 onChildAdded(postFeedRef, async (snapshot) => {
   const post = snapshot.val();
@@ -100,10 +100,17 @@ onChildAdded(postFeedRef, async (snapshot) => {
       <span class="likeCount">${likeCount} ${likeCount === 1 ? 'like' : 'likes'}</span>
     </div>
     <small>${new Date(post.timestamp).toLocaleString()}</small>
+
+    <div class="comment-section">
+      <input type="text" class="commentInput" placeholder="Add a comment..." />
+      <button class="submitComment">Post</button>
+      <div class="commentList"></div>
+    </div>
   `;
 
   postsDiv.prepend(postElement);
 
+  // Like functionality
   const likeBtn = postElement.querySelector('.likeBtn');
   const likeCountSpan = postElement.querySelector('.likeCount');
 
@@ -117,7 +124,6 @@ onChildAdded(postFeedRef, async (snapshot) => {
       await set(likeRef, true); // Like
     }
 
-    // Refresh the like UI
     const updatedPostSnap = await get(dbRef(database, `posts/${postId}`));
     const updatedPost = updatedPostSnap.val();
     const newLikeCount = updatedPost.likes ? Object.keys(updatedPost.likes).length : 0;
@@ -125,6 +131,36 @@ onChildAdded(postFeedRef, async (snapshot) => {
 
     likeBtn.textContent = hasLiked ? '💙 Unlike' : '🤍 Like';
     likeCountSpan.textContent = `${newLikeCount} ${newLikeCount === 1 ? 'like' : 'likes'}`;
+  });
+
+  // Comment functionality
+  const commentInput = postElement.querySelector('.commentInput');
+  const submitCommentBtn = postElement.querySelector('.submitComment');
+  const commentList = postElement.querySelector('.commentList');
+
+  submitCommentBtn.addEventListener('click', async () => {
+    const commentText = commentInput.value.trim();
+    if (!commentText) return;
+
+    const commentRef = push(dbRef(database, `comments/${postId}`));
+    const newComment = {
+      uid: user.uid,
+      username: user.displayName || 'Anonymous',
+      text: commentText,
+      timestamp: Date.now()
+    };
+
+    await set(commentRef, newComment);
+    commentInput.value = '';
+  });
+
+  // Load existing and new comments
+  const commentRef = dbRef(database, `comments/${postId}`);
+  onChildAdded(commentRef, (snapshot) => {
+    const comment = snapshot.val();
+    const commentElement = document.createElement('div');
+    commentElement.innerHTML = `<strong>${comment.username}</strong>: ${comment.text} <small>${new Date(comment.timestamp).toLocaleTimeString()}</small>`;
+    commentList.appendChild(commentElement);
   });
 });
 
